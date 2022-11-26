@@ -61,6 +61,7 @@ func (s *controllingSelector) ContactCandidates() {
 		isLocalNominatable, lReason := s.isNominatable(p.Local)
 		isRemoteNominatable, rReason := s.isNominatable(p.Remote)
 
+		s.log.Tracef("ContactCandidates(), trying to find nominatable pairs")
 		if p != nil && isLocalNominatable && isRemoteNominatable {
 			s.log.Tracef("Nominatable pair found, nominating (%s, %s)", p.Local.String(), p.Remote.String())
 			p.nominated = true
