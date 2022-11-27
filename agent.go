@@ -498,6 +498,7 @@ func (a *Agent) connectivityChecks() {
 				return
 			case ConnectionStateChecking:
 				// We have just entered checking for the first time so update our checking timer
+				a.log.Infof("contact ConnectionStateChecking, %d, %d", a.disconnectedTimeout.Milliseconds(), a.failedTimeout.Milliseconds())
 				if lastConnectionState != a.connectionState {
 					checkingDuration = time.Now()
 				}
@@ -515,6 +516,7 @@ func (a *Agent) connectivityChecks() {
 		}
 	}
 
+	a.log.Infof("Starting contact monitoring")
 	for {
 		interval := defaultKeepaliveInterval
 
@@ -535,14 +537,18 @@ func (a *Agent) connectivityChecks() {
 		updateInterval(a.disconnectedTimeout)
 		updateInterval(a.failedTimeout)
 
+		a.log.Infof("Contact interval: %d", interval.Milliseconds())
 		t := time.NewTimer(interval)
 		select {
 		case <-a.forceCandidateContact:
+			a.log.Infof("Force candidate contact")
 			t.Stop()
 			contact()
 		case <-t.C:
+			a.log.Infof("Contact at interval %d", interval)
 			contact()
 		case <-a.done:
+			a.log.Infof("Contact done, stopping")
 			t.Stop()
 			return
 		}
@@ -997,11 +1003,12 @@ func (a *Agent) sendBindingSuccess(m *stun.Message, local, remote Candidate) {
 	}
 }
 
-/* Removes pending binding requests that are over maxBindingRequestTimeout old
+/*
+Removes pending binding requests that are over maxBindingRequestTimeout old
 
-   Let HTO be the transaction timeout, which SHOULD be 2*RTT if
-   RTT is known or 500 ms otherwise.
-   https://tools.ietf.org/html/rfc8445#appendix-B.1
+	Let HTO be the transaction timeout, which SHOULD be 2*RTT if
+	RTT is known or 500 ms otherwise.
+	https://tools.ietf.org/html/rfc8445#appendix-B.1
 */
 func (a *Agent) invalidatePendingBindingRequests(filterTime time.Time) {
 	initialSize := len(a.pendingBindingRequests)

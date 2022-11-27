@@ -1,6 +1,7 @@
 package ice
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -28,20 +29,22 @@ func (s *controllingSelector) Start() {
 	s.nominatedPair = nil
 }
 
-func (s *controllingSelector) isNominatable(c Candidate) bool {
+func (s *controllingSelector) isNominatable(c Candidate) (bool, string) {
+	elapsed := time.Since(s.startTime).Nanoseconds()
 	switch {
 	case c.Type() == CandidateTypeHost:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.hostAcceptanceMinWait.Nanoseconds()
+		return elapsed > s.agent.hostAcceptanceMinWait.Nanoseconds(), fmt.Sprintf("host candidate %d", elapsed)
 	case c.Type() == CandidateTypeServerReflexive:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.srflxAcceptanceMinWait.Nanoseconds()
+		return elapsed > s.agent.srflxAcceptanceMinWait.Nanoseconds(), fmt.Sprintf("srflx candidate %d", elapsed)
 	case c.Type() == CandidateTypePeerReflexive:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.prflxAcceptanceMinWait.Nanoseconds()
+		return elapsed > s.agent.prflxAcceptanceMinWait.Nanoseconds(), fmt.Sprintf("prflx candidate %d", elapsed)
 	case c.Type() == CandidateTypeRelay:
-		return time.Since(s.startTime).Nanoseconds() > s.agent.relayAcceptanceMinWait.Nanoseconds()
+		return elapsed > s.agent.relayAcceptanceMinWait.Nanoseconds(), fmt.Sprintf("relay candidate %d", elapsed)
 	}
 
-	s.log.Errorf("isNominatable invalid candidate type %s", c.Type().String())
-	return false
+	err := fmt.Sprintf("isNominatable invalid candidate type %s", c.Type().String())
+	s.log.Errorf(err)
+	return false, err
 }
 
 func (s *controllingSelector) ContactCandidates() {
@@ -55,12 +58,18 @@ func (s *controllingSelector) ContactCandidates() {
 		s.nominatePair(s.nominatedPair)
 	default:
 		p := s.agent.getBestValidCandidatePair()
-		if p != nil && s.isNominatable(p.Local) && s.isNominatable(p.Remote) {
-			s.log.Tracef("Nominatable pair found, nominating (%s, %s)", p.Local.String(), p.Remote.String())
+		isLocalNominatable, lReason := s.isNominatable(p.Local)
+		isRemoteNominatable, rReason := s.isNominatable(p.Remote)
+
+		s.log.Infof("ContactCandidates(), trying to find nominatable pairs")
+		if p != nil && isLocalNominatable && isRemoteNominatable {
+			s.log.Infof("Nominatable pair found, nominating (%s, %s)", p.Local.String(), p.Remote.String())
 			p.nominated = true
 			s.nominatedPair = p
 			s.nominatePair(p)
 			return
+		} else {
+			s.log.Infof("Not nominatable (%t %s, %t %s) reasons (%s, %s) ", isLocalNominatable, p.Local.String(), isRemoteNominatable, p.Remote.String(), lReason, rReason)
 		}
 		s.agent.pingAllCandidates()
 	}
@@ -102,11 +111,16 @@ func (s *controllingSelector) HandleBindingRequest(m *stun.Message, local, remot
 		bestPair := s.agent.getBestAvailableCandidatePair()
 		if bestPair == nil {
 			s.log.Tracef("No best pair available\n")
-		} else if bestPair.equal(p) && s.isNominatable(p.Local) && s.isNominatable(p.Remote) {
-			s.log.Tracef("The candidate (%s, %s) is the best candidate available, marking it as nominated\n",
-				p.Local.String(), p.Remote.String())
-			s.nominatedPair = p
-			s.nominatePair(p)
+		} else if bestPair.equal(p) {
+			isLocalNominatable, _ := s.isNominatable(p.Local)
+			isRemoteNominatable, _ := s.isNominatable(p.Remote)
+
+			if isLocalNominatable && isRemoteNominatable {
+				s.log.Infof("The candidate (%s, %s) is the best candidate available, marking it as nominated\n",
+					p.Local.String(), p.Remote.String())
+				s.nominatedPair = p
+				s.nominatePair(p)
+			}
 		}
 	}
 }
