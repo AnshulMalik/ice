@@ -58,18 +58,22 @@ func (s *controllingSelector) ContactCandidates() {
 		s.nominatePair(s.nominatedPair)
 	default:
 		p := s.agent.getBestValidCandidatePair()
-		isLocalNominatable, lReason := s.isNominatable(p.Local)
-		isRemoteNominatable, rReason := s.isNominatable(p.Remote)
+		if p != nil {
+			isLocalNominatable, lReason := s.isNominatable(p.Local)
+			isRemoteNominatable, rReason := s.isNominatable(p.Remote)
 
-		s.log.Infof("ContactCandidates(), trying to find nominatable pairs")
-		if p != nil && isLocalNominatable && isRemoteNominatable {
-			s.log.Infof("Nominatable pair found, nominating (%s, %s)", p.Local.String(), p.Remote.String())
-			p.nominated = true
-			s.nominatedPair = p
-			s.nominatePair(p)
-			return
+			s.log.Infof("ContactCandidates(), trying to find nominatable pairs")
+			if isLocalNominatable && isRemoteNominatable {
+				s.log.Infof("Nominatable pair found, nominating (%s, %s)", p.Local.String(), p.Remote.String())
+				p.nominated = true
+				s.nominatedPair = p
+				s.nominatePair(p)
+				return
+			} else {
+				s.log.Infof("Not nominatable (%t %s, %t %s) reasons (%s, %s) ", isLocalNominatable, p.Local.String(), isRemoteNominatable, p.Remote.String(), lReason, rReason)
+			}
 		} else {
-			s.log.Infof("Not nominatable (%t %s, %t %s) reasons (%s, %s) ", isLocalNominatable, p.Local.String(), isRemoteNominatable, p.Remote.String(), lReason, rReason)
+			s.log.Info("No best valid candidate pair")
 		}
 		s.agent.pingAllCandidates()
 	}

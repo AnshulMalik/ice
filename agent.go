@@ -643,6 +643,7 @@ func (a *Agent) getBestAvailableCandidatePair() *CandidatePair {
 
 func (a *Agent) getBestValidCandidatePair() *CandidatePair {
 	var best *CandidatePair
+	a.log.Info("getBestValidCandidatePair")
 	for _, p := range a.checklist {
 		if p.state != CandidatePairStateSucceeded {
 			continue
@@ -650,8 +651,10 @@ func (a *Agent) getBestValidCandidatePair() *CandidatePair {
 
 		if best == nil {
 			best = p
+			a.log.Infof("Current best: %s", p.String())
 		} else if best.priority() < p.priority() {
 			best = p
+			a.log.Infof("Replacing current best %s with %s", best.String(), p.String())
 		}
 	}
 	return best
