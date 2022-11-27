@@ -515,8 +515,9 @@ func (a *Agent) connectivityChecks() {
 			a.log.Warnf("taskLoop failed: %v", err)
 		}
 	}
-
-	a.log.Infof("Starting contact monitoring")
+	if a.isControlling {
+		a.log.Infof("Starting contact monitoring")
+	}
 	for {
 		interval := defaultKeepaliveInterval
 
@@ -537,18 +538,26 @@ func (a *Agent) connectivityChecks() {
 		updateInterval(a.disconnectedTimeout)
 		updateInterval(a.failedTimeout)
 
-		a.log.Infof("Contact interval: %d", interval.Milliseconds())
+		if a.isControlling {
+			a.log.Infof("Contact interval: %d", interval.Milliseconds())
+		}
 		t := time.NewTimer(interval)
 		select {
 		case <-a.forceCandidateContact:
-			a.log.Infof("Force candidate contact")
+			if a.isControlling {
+				a.log.Infof("Force candidate contact")
+			}
 			t.Stop()
 			contact()
 		case <-t.C:
-			a.log.Infof("Contact at interval %d", interval)
+			if a.isControlling {
+				a.log.Infof("Contact at interval %d", interval)
+			}
 			contact()
 		case <-a.done:
-			a.log.Infof("Contact done, stopping")
+			if a.isControlling {
+				a.log.Infof("Contact done, stopping")
+			}
 			t.Stop()
 			return
 		}
@@ -562,7 +571,9 @@ func (a *Agent) updateConnectionState(newState ConnectionState) {
 			a.deleteAllCandidates()
 		}
 
-		a.log.Infof("Setting new connection state: %s", newState)
+		if a.isControlling {
+			a.log.Infof("Setting new connection state: %s", newState)
+		}
 		a.connectionState = newState
 
 		// Call handler after finishing current task since we may be holding the agent lock
@@ -574,7 +585,9 @@ func (a *Agent) updateConnectionState(newState ConnectionState) {
 }
 
 func (a *Agent) setSelectedPair(p *CandidatePair) {
-	a.log.Tracef("Set selected candidate pair: %s", p)
+	if a.isControlling {
+		a.log.Tracef("Set selected candidate pair: %s", p)
+	}
 
 	if p == nil {
 		var nilPair *CandidatePair
@@ -602,10 +615,14 @@ func (a *Agent) setSelectedPair(p *CandidatePair) {
 }
 
 func (a *Agent) pingAllCandidates() {
-	a.log.Trace("pinging all candidates")
+	if a.isControlling {
+		a.log.Trace("pinging all candidates")
+	}
 
 	if len(a.checklist) == 0 {
-		a.log.Warn("pingAllCandidates called with no candidate pairs. Connection is not possible yet.")
+		if a.isControlling {
+			a.log.Warn("pingAllCandidates called with no candidate pairs. Connection is not possible yet.")
+		}
 	}
 
 	for _, p := range a.checklist {
@@ -616,7 +633,9 @@ func (a *Agent) pingAllCandidates() {
 		}
 
 		if p.bindingRequestCount > a.maxBindingRequests {
-			a.log.Tracef("max requests reached for pair %s, marking it as failed\n", p)
+			if a.isControlling {
+				a.log.Tracef("max requests reached for pair %s, marking it as failed\n", p)
+			}
 			p.state = CandidatePairStateFailed
 		} else {
 			a.selector.PingCandidate(p.Local, p.Remote)
@@ -643,18 +662,31 @@ func (a *Agent) getBestAvailableCandidatePair() *CandidatePair {
 
 func (a *Agent) getBestValidCandidatePair() *CandidatePair {
 	var best *CandidatePair
-	a.log.Info("getBestValidCandidatePair")
+	if a.isControlling {
+		a.log.Info("getBestValidCandidatePair")
+	}
 	for _, p := range a.checklist {
+		if a.isControlling {
+			a.log.Infof("getBestValidCandidatePair>State %s, Candidate: %s", p.state.String(), p.String())
+		}
 		if p.state != CandidatePairStateSucceeded {
 			continue
 		}
 
 		if best == nil {
 			best = p
-			a.log.Infof("Current best: %s", p.String())
+			if a.isControlling {
+				a.log.Infof("getBestValidCandidatePair>Current best: %s", p.String())
+			}
 		} else if best.priority() < p.priority() {
 			best = p
-			a.log.Infof("Replacing current best %s with %s", best.String(), p.String())
+			if a.isControlling {
+				a.log.Infof("getBestValidCandidatePair>Replacing current best %s with %s", best.String(), p.String())
+			}
+		} else {
+			if a.isControlling {
+				a.log.Infof("getBestValidCandidatePair>priority: %d, %d, %d", best.priority(), p.priority(), best.priority()-p.priority())
+			}
 		}
 	}
 	return best
@@ -970,7 +1002,9 @@ func (a *Agent) findRemoteCandidate(networkType NetworkType, addr net.Addr) Cand
 }
 
 func (a *Agent) sendBindingRequest(m *stun.Message, local, remote Candidate) {
-	a.log.Tracef("ping STUN from %s to %s\n", local.String(), remote.String())
+	if a.isControlling {
+		a.log.Tracef("ping STUN from %s to %s\n", local.String(), remote.String())
+	}
 
 	a.invalidatePendingBindingRequests(time.Now())
 	a.pendingBindingRequests = append(a.pendingBindingRequests, bindingRequest{
@@ -1025,7 +1059,9 @@ func (a *Agent) invalidatePendingBindingRequests(filterTime time.Time) {
 
 	a.pendingBindingRequests = temp
 	if bindRequestsRemoved := initialSize - len(a.pendingBindingRequests); bindRequestsRemoved > 0 {
-		a.log.Tracef("Discarded %d binding requests because they expired", bindRequestsRemoved)
+		if a.isControlling {
+			a.log.Tracef("Discarded %d binding requests because they expired", bindRequestsRemoved)
+		}
 	}
 }
 
@@ -1121,8 +1157,9 @@ func (a *Agent) handleInbound(m *stun.Message, local Candidate, remote net.Addr)
 			a.log.Debugf("adding a new peer-reflexive candidate: %s ", remote)
 			a.addRemoteCandidate(remoteCandidate)
 		}
-
-		a.log.Tracef("inbound STUN (Request) from %s to %s", remote.String(), local.String())
+		if a.isControlling {
+			a.log.Tracef("inbound STUN (Request) from %s to %s", remote.String(), local.String())
+		}
 
 		a.selector.HandleBindingRequest(m, local, remoteCandidate)
 	}

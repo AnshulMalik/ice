@@ -236,7 +236,7 @@ func (s *controlledSelector) HandleSuccessResponse(m *stun.Message, local, remot
 		return
 	}
 
-	s.log.Tracef("inbound STUN (SuccessResponse) from %s to %s", remote.String(), local.String())
+	//s.log.Tracef("inbound STUN (SuccessResponse) from %s to %s", remote.String(), local.String())
 
 	p := s.agent.findPair(local, remote)
 	if p == nil {
@@ -246,7 +246,7 @@ func (s *controlledSelector) HandleSuccessResponse(m *stun.Message, local, remot
 	}
 
 	p.state = CandidatePairStateSucceeded
-	s.log.Tracef("Found valid candidate pair: %s", p)
+	//s.log.Tracef("Found valid candidate pair: %s", p)
 	if p.nominateOnBindingSuccess {
 		if selectedPair := s.agent.getSelectedPair(); selectedPair == nil {
 			s.agent.setSelectedPair(p)
